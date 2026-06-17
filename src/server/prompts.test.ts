@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { GameEvent, GameState } from "../shared/types";
-import { buildHistory } from "./prompts";
+import { createGame } from "../engine/index";
+import { buildHistory, buildSystemPrompt } from "./prompts";
 
 const stateWithEvents = (events: GameEvent[]): GameState => ({
 	players: [
@@ -102,5 +103,77 @@ describe("buildHistory", () => {
 			{ role: "assistant", content: "Finally." },
 			{ role: "user", content: "[Pink]: That was fast." },
 		]);
+	});
+});
+
+describe("buildSystemPrompt — two-human game", () => {
+	const twoHumanState = createGame({
+		aiPlayers: [
+			{ name: "Red", personality: "Paranoid" },
+			{ name: "Blue", personality: "Pigeon" },
+			{ name: "Green", personality: "Calm" },
+			{ name: "Orange", personality: "Loud" },
+		],
+		humans: [{ name: "Pink" }, { name: "Violet" }],
+	});
+
+	const redPlayer = twoHumanState.players.find((p) => p.name === "Red")!;
+
+	const stateWith = (overrides: Partial<GameState>): GameState => ({
+		...twoHumanState,
+		...overrides,
+	});
+
+	test("states there are two Humans, not exactly one", () => {
+		const prompt = buildSystemPrompt(redPlayer, twoHumanState, "Paranoid");
+
+		expect(prompt).toContain("TWO players are Humans");
+		expect(prompt).not.toContain("Exactly one player is a Human");
+	});
+
+	test("states machines win when both Humans are voted out", () => {
+		const prompt = buildSystemPrompt(redPlayer, twoHumanState, "Paranoid");
+
+		expect(prompt).toContain("Machines win when both Humans are voted out");
+	});
+
+	test("states humans win if they survive until only two Machines remain", () => {
+		const prompt = buildSystemPrompt(redPlayer, twoHumanState, "Paranoid");
+
+		expect(prompt).toContain("Humans win if they survive until only two Machines remain");
+	});
+
+	test("debrief outcome names both humans when machines win", () => {
+		const debriefState = stateWith({ phase: "debrief", winner: "machines" });
+
+		const prompt = buildSystemPrompt(redPlayer, debriefState, "Paranoid");
+
+		expect(prompt).toContain(
+			"The Machines won: the Humans, Pink and Violet, were found and eliminated",
+		);
+	});
+
+	test("debrief outcome says both humans survived when both are alive", () => {
+		const debriefState = stateWith({ phase: "debrief", winner: "human" });
+
+		const prompt = buildSystemPrompt(redPlayer, debriefState, "Paranoid");
+
+		expect(prompt).toContain("The Humans, Pink and Violet, survived and won");
+	});
+
+	test("debrief outcome correctly names survivor and casualty when one human was eliminated", () => {
+		const debriefState = stateWith({
+			phase: "debrief",
+			winner: "human",
+			players: twoHumanState.players.map((p) =>
+				p.name === "Violet" ? { ...p, alive: false } : p,
+			),
+		});
+
+		const prompt = buildSystemPrompt(redPlayer, debriefState, "Paranoid");
+
+		expect(prompt).toContain(
+			"The Humans won: Pink survived to the end; Violet was eliminated along the way",
+		);
 	});
 });

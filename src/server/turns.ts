@@ -176,19 +176,27 @@ export const runAiTurn = async (session: GameSession, publish: Publish): Promise
 	applyAndPublish(session, { type: "endTurn", player: playerName }, publish);
 };
 
-/** One public message from the human. The turn continues until they end it. */
-export const speakAsHuman = (session: GameSession, message: string, publish: Publish): void => {
+/**
+ * One public message from the human. The turn continues until they end it.
+ * Caller must have already verified `playerName` is the acting player.
+ */
+export const speakAsHuman = (
+	session: GameSession,
+	playerName: string,
+	message: string,
+	publish: Publish,
+): void => {
 	const content = message.trim();
 	if (content.length === 0) {
 		return;
 	}
-	applyAndPublish(
-		session,
-		{ type: "speech", player: session.state.actingPlayer, content },
-		publish,
-	);
+	applyAndPublish(session, { type: "speech", player: playerName, content }, publish);
 };
 
-export const endHumanTurn = (session: GameSession, publish: Publish): void => {
-	applyAndPublish(session, { type: "endTurn", player: session.state.actingPlayer }, publish);
+/**
+ * Ends the human's turn.
+ * Caller must have already verified `playerName` is the acting player.
+ */
+export const endHumanTurn = (session: GameSession, playerName: string, publish: Publish): void => {
+	applyAndPublish(session, { type: "endTurn", player: playerName }, publish);
 };

@@ -2,15 +2,17 @@
  * The wire protocol between the frontend and the server.
  *
  * REST:
- *   GET  /api/models      -> ModelsResponse (proxied + cached from OpenRouter, no key needed)
- *   GET  /api/key-status  -> KeyStatusResponse
- *   POST /api/games       -> CreateGameRequest -> CreateGameResponse
+ *   GET  /api/models         -> ModelsResponse (proxied + cached from OpenRouter, no key needed)
+ *   GET  /api/key-status     -> KeyStatusResponse
+ *   POST /api/games          -> CreateGameRequest -> CreateGameResponse
+ *   POST /api/games/:id/join -> JoinGameResponse (no request body; claims the second human seat)
  *
  * WebSocket:
- *   /ws?gameId=<id>
- *   On connect the server sends a full `sync`. After that, `event` and `status`
- *   messages stream in. Everything is broadcast to all sockets subscribed to the
- *   same game ID, so spectators and future multiplayer come for free.
+ *   /ws?gameId=<id>&token=<token>
+ *   On connect the server sends a full `sync` with `youAre` set to the player name
+ *   this socket controls. After that, `event` and `status` messages stream in.
+ *   Broadcasts omit `youAre`. All sockets subscribed to the same game ID receive
+ *   the same `event` and `status` messages, so spectators come for free.
  */
 import type { GameEvent, GameSettings, GameState } from "./types";
 
@@ -22,9 +24,20 @@ export type CreateGameRequest = {
 	apiKey?: string;
 };
 
-export type CreateGameResponse = {
+/** A seat binding: an identity token and the player name it controls. */
+export type SeatClaim = {
+	/** Identity token; present this on /ws as ?token=. */
+	token: string;
+	/** The player name this token controls. */
+	playerName: string;
+};
+
+/** Creating a game is a join (the host's seat claim) plus the new game's id. */
+export type CreateGameResponse = SeatClaim & {
 	gameId: string;
 };
+
+export type JoinGameResponse = SeatClaim;
 
 export type KeyStatusResponse = {
 	hasEnvKey: boolean;
@@ -45,6 +58,8 @@ export type ModelsResponse = {
 };
 
 export type TurnStatus =
+	/** Not all human seats have been claimed yet; game has not started. */
+	| "waitingForPlayers"
 	/** An AI player is up next; waiting for the user to click "next turn". */
 	| "waitingForAdvance"
 	/** An AI player's turn is being processed; actions are streaming in. */
@@ -62,7 +77,14 @@ export type ClientMessage =
 	| { type: "humanEndTurn" };
 
 export type ServerMessage =
-	| { type: "sync"; state: GameState; status: TurnStatus; settings: GameSettings }
+	| {
+		type: "sync";
+		state: GameState;
+		status: TurnStatus;
+		settings: GameSettings;
+		/** The player name this socket controls. Only set on per-socket syncs; omitted on broadcasts. */
+		youAre?: string;
+	}
 	| { type: "event"; event: GameEvent }
 	| { type: "status"; status: TurnStatus; actingPlayer: string }
 	| { type: "error"; message: string };

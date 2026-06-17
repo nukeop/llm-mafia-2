@@ -49,8 +49,10 @@ export type GameState = {
 };
 
 export type GameSettings = {
-	/** Number of AI players, 2-8. */
+	/** Number of AI players, 3-8. */
 	readonly aiCount: number;
+	/** Number of human seats, 1 or 2. */
+	readonly humanCount: number;
 	/** OpenRouter model ID, e.g. "anthropic/claude-sonnet-4.5". */
 	readonly modelId: string;
 };
