@@ -18,6 +18,9 @@ const topicOf = (gameId: string): string => `game:${gameId}`;
 const hasEnvKey = (): boolean => Boolean(process.env.OPENROUTER_API_KEY);
 
 const server = serve({
+	port: Number(process.env.PORT) || 3000,
+	hostname: "0.0.0.0",
+
 	routes: {
 		"/*": index,
 

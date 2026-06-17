@@ -27,9 +27,7 @@ export type ApplyResult =
 
 export const createGame = (options: {
 	aiPlayers: { name: string; personality: string }[];
-	humanName: string;
-	/** Seat for the human in the turn order. Defaults to last. */
-	humanIndex?: number;
+	humans: { name: string; seat?: number }[];
 }): GameState => {
 	const aiPlayers: Player[] = options.aiPlayers.map(({ name, personality }) => ({
 		name,
@@ -37,13 +35,12 @@ export const createGame = (options: {
 		personality,
 		alive: true,
 	}));
-	const human: Player = { name: options.humanName, kind: "human", alive: true };
 
-	const seat = options.humanIndex ?? aiPlayers.length;
-	const players = [...aiPlayers.slice(0, seat), human, ...aiPlayers.slice(seat)];
+	const players = insertHumans(aiPlayers, options.humans);
+
 	const opening: GameEvent = {
 		type: "announcement",
-		content: `The game begins! ${players.length} players are present, and exactly one of them is a Human in disguise.`,
+		content: `The game begins! ${players.length} players are present, and ${humanCountPhrase(options.humans.length)}.`,
 		round: 1,
 	};
 
@@ -55,6 +52,31 @@ export const createGame = (options: {
 		events: [opening],
 		phase: "playing",
 	};
+};
+
+/**
+ * Inserts humans into the AI player list according to their requested seats.
+ * Humans without a seat are appended in array order after all seated placements.
+ * Humans with a seat are inserted at that index in the final list.
+ */
+const insertHumans = (
+	aiPlayers: Player[],
+	humans: { name: string; seat?: number }[],
+): Player[] => {
+	const toHuman = ({ name }: { name: string }): Player => ({ name, kind: "human", alive: true });
+
+	const seated = humans.filter((h) => h.seat !== undefined);
+	const unseated = humans.filter((h) => h.seat === undefined);
+
+	// Sort seated humans by their requested index so we insert left-to-right.
+	const sortedSeated = [...seated].sort((a, b) => a.seat! - b.seat!);
+
+	let result: Player[] = [...aiPlayers];
+	for (const human of sortedSeated) {
+		result = [...result.slice(0, human.seat!), toHuman(human), ...result.slice(human.seat!)];
+	}
+
+	return [...result, ...unseated.map(toHuman)];
 };
 
 export const applyAction = (state: GameState, action: EngineAction): ApplyResult => {
@@ -225,7 +247,7 @@ const eliminate = (
 		}),
 	};
 
-	const winner = winnerAfterElimination(afterDeath, eliminated);
+	const winner = winnerAfterElimination(afterDeath);
 	if (winner !== undefined) {
 		return {
 			state: startDebrief(afterDeath, winner),
@@ -249,22 +271,42 @@ const startDebrief = (state: GameState, winner: NonNullable<GameState["winner"]>
 };
 
 const debriefEvents = (state: GameState, winner: NonNullable<GameState["winner"]>): GameEvent[] => {
-	const human = state.players.find((player) => player.kind === "human");
+	const humans = state.players.filter((player) => player.kind === "human");
 	return [
 		{ type: "gameOver", winner, round: state.round },
 		{
 			type: "announcement",
-			content: `The Human was ${human?.name}. The game moves to a debriefing - everyone may share their final thoughts and say goodbye.`,
+			content: `${humanRevealPhrase(humans.map((h) => h.name))} The game moves to a debriefing - everyone may share their final thoughts and say goodbye.`,
 			round: state.round,
 		},
 	];
 };
 
-const winnerAfterElimination = (
-	state: GameState,
-	eliminated: Player,
-): GameState["winner"] => {
-	if (eliminated.kind === "human") {
+const humanCountPhrase = (count: number): string => {
+	if (count === 1) {
+		return "exactly one of them is a Human in disguise";
+	}
+	return "two of them are Humans in disguise";
+};
+
+const humanRevealPhrase = (names: string[]): string => {
+	if (names.length === 1) {
+		return `The Human was ${names[0]}.`;
+	}
+	return `The Humans were ${names.join(" and ")}.`;
+};
+
+/**
+ * Decides the winner after a single elimination, or undefined if play continues.
+ *
+ * Each round removes at most one player, so the machine count decreases by one at
+ * a time: the "exactly two machines" human-win line is always landed on, never
+ * skipped. If a future rule ever eliminates more than one player per round, revisit
+ * this equality check (and the start-state assumption that no game begins already won).
+ */
+const winnerAfterElimination = (state: GameState): GameState["winner"] => {
+	const livingHumans = livingPlayers(state).filter((player) => player.kind === "human");
+	if (livingHumans.length === 0) {
 		return "machines";
 	}
 	if (livingAiPlayers(state).length === 2) {

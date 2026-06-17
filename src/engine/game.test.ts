@@ -5,7 +5,7 @@ import { applyAction, createGame, type EngineAction } from "./index";
 const newGame = (aiNames: string[] = ["Red", "Blue", "Green", "Orange"]) =>
 	createGame({
 		aiPlayers: aiNames.map((name) => ({ name, personality: `${name}-personality` })),
-		humanName: "Pink",
+		humans: [{ name: "Pink" }],
 	});
 
 /** Applies an action that is expected to succeed and returns the new state. */
@@ -59,8 +59,7 @@ describe("createGame", () => {
 				{ name: "Red", personality: "a" },
 				{ name: "Blue", personality: "b" },
 			],
-			humanName: "Pink",
-			humanIndex: 1,
+			humans: [{ name: "Pink", seat: 1 }],
 		});
 
 		expect(state.players.map((player) => player.name)).toEqual(["Red", "Pink", "Blue"]);
@@ -73,11 +72,38 @@ describe("createGame", () => {
 				{ name: "Red", personality: "a" },
 				{ name: "Blue", personality: "b" },
 			],
-			humanName: "Pink",
-			humanIndex: 0,
+			humans: [{ name: "Pink", seat: 0 }],
 		});
 
 		expect(state.players.map((player) => player.name)).toEqual(["Pink", "Red", "Blue"]);
+		expect(state.actingPlayer).toBe("Pink");
+	});
+
+	test("two humans seated among AIs produce the correct interleaved order", () => {
+		const state = createGame({
+			aiPlayers: [
+				{ name: "Red", personality: "a" },
+				{ name: "Blue", personality: "b" },
+				{ name: "Green", personality: "c" },
+			],
+			humans: [
+				{ name: "Pink", seat: 0 },
+				{ name: "Violet", seat: 3 },
+			],
+		});
+
+		expect(state.players.map((player) => player.name)).toEqual([
+			"Pink",
+			"Red",
+			"Blue",
+			"Violet",
+			"Green",
+		]);
+		expect(state.players.filter((player) => player.kind === "human")).toEqual([
+			{ name: "Pink", kind: "human", alive: true },
+			{ name: "Violet", kind: "human", alive: true },
+		]);
+		expect(state.players.every((player) => player.alive)).toBe(true);
 		expect(state.actingPlayer).toBe("Pink");
 	});
 
@@ -90,7 +116,7 @@ describe("createGame", () => {
 		expect(state.votes).toEqual([]);
 	});
 
-	test("opens the log with a game-start announcement", () => {
+	test("opens the log with a game-start announcement for one human", () => {
 		const state = newGame();
 
 		expect(state.events).toEqual([
@@ -98,6 +124,26 @@ describe("createGame", () => {
 				type: "announcement",
 				content:
 					"The game begins! 5 players are present, and exactly one of them is a Human in disguise.",
+				round: 1,
+			},
+		]);
+	});
+
+	test("opens the log with a two-human game-start announcement", () => {
+		const state = createGame({
+			aiPlayers: [
+				{ name: "Red", personality: "a" },
+				{ name: "Blue", personality: "b" },
+				{ name: "Green", personality: "c" },
+			],
+			humans: [{ name: "Pink" }, { name: "Violet" }],
+		});
+
+		expect(state.events).toEqual([
+			{
+				type: "announcement",
+				content:
+					"The game begins! 5 players are present, and two of them are Humans in disguise.",
 				round: 1,
 			},
 		]);
@@ -332,6 +378,64 @@ describe("game over", () => {
 		expect(state.winner).toBe("human");
 		expect(state.events.at(-2)).toEqual({ type: "gameOver", winner: "human", round: 1 });
 	});
+
+	describe("two-human games", () => {
+		// 3 AIs + 2 humans: Red, Blue, Green, Pink, Violet
+		const twoHumanGame = () =>
+			createGame({
+				aiPlayers: [
+					{ name: "Red", personality: "a" },
+					{ name: "Blue", personality: "b" },
+					{ name: "Green", personality: "c" },
+				],
+				humans: [{ name: "Pink" }, { name: "Violet" }],
+			});
+
+		const twoHumanVote = (targets: [string, string, string]): EngineAction[] => [
+			vote("Red", targets[0]),
+			endTurn("Red"),
+			vote("Blue", targets[1]),
+			endTurn("Blue"),
+			vote("Green", targets[2]),
+		];
+
+		test("voting out one human with two humans alive continues the game", () => {
+			const state = applyAll(twoHumanGame(), twoHumanVote(["Pink", "Pink", "Pink"]));
+
+			expect(state.winner).toBeUndefined();
+			expect(state.phase).toBe("playing");
+			expect(state.round).toBe(2);
+		});
+
+		test("voting out the second human after the first gives machines the win", () => {
+			const round1 = applyAll(twoHumanGame(), twoHumanVote(["Pink", "Pink", "Pink"]));
+			// After round 1, Green was the last voter so Green is still acting. Advance to Red.
+			const round2Start = applyAll(round1, [endTurn("Green"), endTurn("Violet")]);
+			const state = applyAll(round2Start, twoHumanVote(["Violet", "Violet", "Violet"]));
+
+			expect(state.winner).toBe("machines");
+			expect(state.phase).toBe("debrief");
+		});
+
+		test("reducing machines to two with both humans alive gives the humans the win", () => {
+			const state = applyAll(twoHumanGame(), twoHumanVote(["Blue", "Blue", "Blue"]));
+
+			expect(state.winner).toBe("human");
+			expect(state.phase).toBe("debrief");
+		});
+
+		test("a lone surviving human wins by attrition after their teammate is eliminated", () => {
+			const round1 = applyAll(twoHumanGame(), twoHumanVote(["Pink", "Pink", "Pink"]));
+			// After round 1, Green was the last voter so Green is still acting. Advance to Red.
+			const round2Start = applyAll(round1, [endTurn("Green"), endTurn("Violet")]);
+			const state = applyAll(round2Start, twoHumanVote(["Blue", "Blue", "Blue"]));
+
+			expect(state.winner).toBe("human");
+			expect(state.phase).toBe("debrief");
+			expect(state.players.find((player) => player.name === "Pink")?.alive).toBe(false);
+			expect(state.players.find((player) => player.name === "Violet")?.alive).toBe(true);
+		});
+	});
 });
 
 describe("debrief", () => {
@@ -348,6 +452,40 @@ describe("debrief", () => {
 			content:
 				"The Human was Pink. The game moves to a debriefing - everyone may share their final thoughts and say goodbye.",
 			round: 1,
+		});
+	});
+
+	test("the debrief reveals both humans when two were in the game", () => {
+		const twoHumanGame = createGame({
+			aiPlayers: [
+				{ name: "Red", personality: "a" },
+				{ name: "Blue", personality: "b" },
+				{ name: "Green", personality: "c" },
+			],
+			humans: [{ name: "Pink" }, { name: "Violet" }],
+		});
+		// Vote out both humans to end the game with machines winning.
+		const round1 = applyAll(twoHumanGame, [
+			vote("Red", "Pink"),
+			endTurn("Red"),
+			vote("Blue", "Pink"),
+			endTurn("Blue"),
+			vote("Green", "Pink"),
+			endTurn("Green"),
+			endTurn("Violet"),
+			vote("Red", "Violet"),
+			endTurn("Red"),
+			vote("Blue", "Violet"),
+			endTurn("Blue"),
+			vote("Green", "Violet"),
+		]);
+
+		expect(round1.phase).toBe("debrief");
+		expect(round1.events.at(-1)).toEqual({
+			type: "announcement",
+			content:
+				"The Humans were Pink and Violet. The game moves to a debriefing - everyone may share their final thoughts and say goodbye.",
+			round: 2,
 		});
 	});
 

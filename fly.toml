@@ -1,0 +1,14 @@
+# Rename "llm-mafia" below if you want a different app name on fly.io
+app = "llm-mafia"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "off"
+  min_machines_running = 1
+  max_machines_running = 1
+  # Sessions live in-memory. One machine is the source of truth and must never
+  # be load-balanced across instances, so we pin to exactly one.
+
+[[vm]]
+  size = "shared-cpu-1x"
