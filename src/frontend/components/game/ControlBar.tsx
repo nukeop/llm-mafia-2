@@ -16,15 +16,10 @@ export const ControlBar = ({ view, send, onLeave }: ControlBarProps) => (
 
 const Controls = ({ view, send, onLeave }: ControlBarProps) => {
 	switch (view.status) {
+		case "waitingForPlayers":
+			return <WaitingForPlayers />;
 		case "waitingForAdvance":
-			return (
-				<button
-					onClick={() => send({ type: "nextTurn" })}
-					className="w-full border border-amber bg-amber/10 px-4 py-3 text-sm font-semibold tracking-[0.2em] text-amber uppercase transition-colors hover:bg-amber hover:text-bg"
-				>
-					Next: {view.actingPlayer}'s turn
-				</button>
-			);
+			return <WaitingForAdvance view={view} send={send} />;
 		case "aiActing":
 			return (
 				<p className="cursor-blink w-full px-4 py-3 text-center text-sm text-dim">
@@ -32,10 +27,78 @@ const Controls = ({ view, send, onLeave }: ControlBarProps) => {
 				</p>
 			);
 		case "waitingForHuman":
-			return <HumanTurnInput send={send} />;
+			return <WaitingForHuman view={view} send={send} />;
 		case "finished":
 			return <FinishedControls view={view} onLeave={onLeave} />;
 	}
+};
+
+const WaitingForPlayers = () => {
+	const shareUrl = location.href;
+
+	const copyUrl = () => {
+		navigator.clipboard.writeText(shareUrl);
+	};
+
+	return (
+		<div className="flex items-center justify-between gap-4">
+			<p className="cursor-blink text-sm text-dim">Waiting for another player to join&hellip;</p>
+			<button
+				onClick={copyUrl}
+				title="Copy invite link"
+				className="shrink-0 border border-edge px-3 py-1.5 text-xs tracking-[0.15em] text-dim uppercase transition-colors hover:border-amber hover:text-amber"
+			>
+				Copy link
+			</button>
+		</div>
+	);
+};
+
+const WaitingForAdvance = ({
+	view,
+	send,
+}: {
+	view: GameView;
+	send: (message: ClientMessage) => void;
+}) => {
+	const isSeated = view.youAre !== undefined;
+
+	if (isSeated) {
+		return (
+			<button
+				onClick={() => send({ type: "nextTurn" })}
+				className="w-full border border-amber bg-amber/10 px-4 py-3 text-sm font-semibold tracking-[0.2em] text-amber uppercase transition-colors hover:bg-amber hover:text-bg"
+			>
+				Next: {view.actingPlayer}'s turn
+			</button>
+		);
+	}
+
+	return (
+		<p className="w-full px-4 py-3 text-center text-sm text-dim">
+			Waiting for {view.actingPlayer}&hellip;
+		</p>
+	);
+};
+
+const WaitingForHuman = ({
+	view,
+	send,
+}: {
+	view: GameView;
+	send: (message: ClientMessage) => void;
+}) => {
+	const isMyTurn = view.youAre === view.actingPlayer;
+
+	if (isMyTurn) {
+		return <HumanTurnInput send={send} />;
+	}
+
+	return (
+		<p className="cursor-blink w-full px-4 py-3 text-center text-sm text-dim">
+			Waiting for {view.actingPlayer}&hellip;
+		</p>
+	);
 };
 
 const HumanTurnInput = ({ send }: { send: (message: ClientMessage) => void }) => {

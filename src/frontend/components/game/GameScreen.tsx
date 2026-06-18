@@ -7,12 +7,17 @@ import { Toasts } from "./Toasts";
 
 type GameScreenProps = {
 	gameId: string;
+	/** Seat token. Undefined means spectator. */
+	token: string | undefined;
 	onLeave: () => void;
 	onRestart: () => void;
 };
 
-export const GameScreen = ({ gameId, onLeave, onRestart }: GameScreenProps) => {
-	const { view, connection, errors, send, reconnect, dismissError } = useGameSocket(gameId);
+export const GameScreen = ({ gameId, token, onLeave, onRestart }: GameScreenProps) => {
+	const { view, connection, errors, send, reconnect, dismissError } = useGameSocket(
+		gameId,
+		token,
+	);
 
 	// The server no longer knows this game (e.g. it restarted): back to the lobby.
 	useEffect(() => {
@@ -31,7 +36,12 @@ export const GameScreen = ({ gameId, onLeave, onRestart }: GameScreenProps) => {
 
 	return (
 		<main className="flex h-screen">
-			<Sidebar state={view.state} settings={view.settings} onRestart={onRestart} />
+			<Sidebar
+				state={view.state}
+				settings={view.settings}
+				youAre={view.youAre}
+				onRestart={onRestart}
+			/>
 
 			<div className="flex min-w-0 flex-1 flex-col">
 				{connection === "closed" && (

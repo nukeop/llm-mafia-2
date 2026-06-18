@@ -1,9 +1,14 @@
 import type {
 	CreateGameRequest,
 	CreateGameResponse,
+	JoinGameResponse,
 	KeyStatusResponse,
 	ModelsResponse,
 } from "../../shared/protocol";
+
+export type JoinResult =
+	| { joined: true; token: string; playerName: string }
+	| { joined: false; roomFull: true };
 
 export const fetchModels = async (): Promise<ModelsResponse> => {
 	const response = await fetch("/api/models");
@@ -32,6 +37,23 @@ export const createGame = async (request: CreateGameRequest): Promise<CreateGame
 		throw new Error(body.error ?? `Failed to create game (${response.status})`);
 	}
 	return body;
+};
+
+export const joinGame = async (gameId: string, token?: string): Promise<JoinResult> => {
+	const response = await fetch(`/api/games/${gameId}/join`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: token !== undefined ? JSON.stringify({ token }) : undefined,
+	});
+	if (response.status === 409) {
+		return { joined: false, roomFull: true };
+	}
+	const body = await response.json();
+	if (!response.ok) {
+		throw new Error(body.error ?? `Failed to join game (${response.status})`);
+	}
+	const { token: returnedToken, playerName } = body as JoinGameResponse;
+	return { joined: true, token: returnedToken, playerName };
 };
 
 /** Same settings and key, fresh players: a re-roll for unlucky personality draws. */

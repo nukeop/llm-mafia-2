@@ -6,10 +6,12 @@ import { playerColor } from "../../lib/playerColor";
 type SidebarProps = {
 	state: GameState;
 	settings: GameSettings;
+	/** The player name this socket controls. Undefined for spectators. */
+	youAre?: string;
 	onRestart: () => void;
 };
 
-export const Sidebar = ({ state, settings, onRestart }: SidebarProps) => (
+export const Sidebar = ({ state, settings, youAre, onRestart }: SidebarProps) => (
 	<aside className="flex w-64 shrink-0 flex-col border-r border-edge bg-panel">
 		<header className="border-b border-edge px-4 py-4">
 			<div className="flex items-center justify-between">
@@ -44,6 +46,7 @@ export const Sidebar = ({ state, settings, onRestart }: SidebarProps) => (
 					player={player}
 					isActing={state.actingPlayer === player.name}
 					hasVoted={state.votes.some((vote) => vote.voter === player.name)}
+					youAre={youAre}
 				/>
 			))}
 		</ul>
@@ -54,9 +57,20 @@ type RosterEntryProps = {
 	player: Player;
 	isActing: boolean;
 	hasVoted: boolean;
+	youAre?: string;
 };
 
-const RosterEntry = ({ player, isActing, hasVoted }: RosterEntryProps) => {
+const playerLabel = (player: Player, youAre: string | undefined): string => {
+	if (player.kind === "ai") {
+		return player.personality ?? "machine";
+	}
+	if (player.name === youAre) {
+		return "← this is you";
+	}
+	return "fellow human";
+};
+
+const RosterEntry = ({ player, isActing, hasVoted, youAre }: RosterEntryProps) => {
 	const deadStyles = player.alive ? "" : "opacity-40";
 	const nameStyles = player.alive ? "" : "line-through";
 
@@ -73,9 +87,7 @@ const RosterEntry = ({ player, isActing, hasVoted }: RosterEntryProps) => {
 					<span className="ml-auto text-[10px] tracking-wider text-victory uppercase">voted</span>
 				)}
 			</div>
-			<p className="mt-0.5 pl-4 text-xs text-dim">
-				{player.kind === "human" ? "← this is you" : (player.personality ?? "machine")}
-			</p>
+			<p className="mt-0.5 pl-4 text-xs text-dim">{playerLabel(player, youAre)}</p>
 		</li>
 	);
 };

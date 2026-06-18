@@ -12,6 +12,8 @@ export type GameView = {
 	status: TurnStatus;
 	actingPlayer: string;
 	settings: GameSettings;
+	/** The player name this socket controls. Latched on first connect sync; undefined for spectators. */
+	youAre?: string;
 };
 
 /** "gone" means the server told us this game no longer exists (close code 4004). */
@@ -66,6 +68,8 @@ const foldMessage = (view: GameView | undefined, message: ServerMessage): GameVi
 				status: message.status,
 				actingPlayer: message.state.actingPlayer,
 				settings: message.settings,
+				// Latch: keep the identity we learned on connect; broadcasts omit youAre.
+				youAre: message.youAre ?? view?.youAre,
 			};
 		case "event":
 			if (view === undefined) {
@@ -82,7 +86,7 @@ const foldMessage = (view: GameView | undefined, message: ServerMessage): GameVi
 	}
 };
 
-export const useGameSocket = (gameId: string) => {
+export const useGameSocket = (gameId: string, token?: string) => {
 	const [view, setView] = useState<GameView>();
 	const [connection, setConnection] = useState<ConnectionState>("connecting");
 	const [errors, setErrors] = useState<string[]>([]);
@@ -91,7 +95,10 @@ export const useGameSocket = (gameId: string) => {
 
 	useEffect(() => {
 		const protocol = location.protocol === "https:" ? "wss" : "ws";
-		const socket = new WebSocket(`${protocol}://${location.host}/ws?gameId=${gameId}`);
+		const tokenParam = token !== undefined ? `&token=${encodeURIComponent(token)}` : "";
+		const socket = new WebSocket(
+			`${protocol}://${location.host}/ws?gameId=${gameId}${tokenParam}`,
+		);
 		socketRef.current = socket;
 		setConnection("connecting");
 
@@ -116,7 +123,7 @@ export const useGameSocket = (gameId: string) => {
 			socket.onclose = null;
 			socket.close();
 		};
-	}, [gameId, attempt]);
+	}, [gameId, token, attempt]);
 
 	const send = useCallback((message: ClientMessage) => {
 		socketRef.current?.send(JSON.stringify(message));
