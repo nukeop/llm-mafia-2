@@ -659,3 +659,24 @@ specific requirements.
 if any, to sign a "copyright disclaimer" for the program, if necessary.
 For more information on this, and how to apply and follow the GNU AGPL, see
 <https://www.gnu.org/licenses/>.
+# bun-react-tailwind-template
+
+To install dependencies:
+
+```bash
+bun install
+```
+
+To start a development server:
+
+```bash
+bun dev
+```
+
+To run for production:
+
+```bash
+bun start
+```
+
+This project was created using `bun init` in bun v1.3.11. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
